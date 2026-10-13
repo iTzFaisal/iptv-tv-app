@@ -536,7 +536,7 @@ function show(session) {
   const hasList = !!(session.list && session.list.length > 1);
   els.prev.classList.toggle("hidden", !hasList);
   els.next.classList.toggle("hidden", !hasList);
-  els.pip.classList.toggle("hidden", !compat.canPip || session.kind === "live");
+  els.pip.classList.toggle("hidden", !compat.canPip);
   updateStepButtons(session);
 }
 
