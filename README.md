@@ -60,26 +60,37 @@ if you like.
 
 ### 3. First run
 
-Open the Pages URL and fill in:
+Open the Pages URL and sign in with just three fields:
 
 | Field | Example |
 |---|---|
 | Panel host | `http://b-4k.pics:80` |
-| Username / Password | your Xtream credentials |
-| Gateway | paste the Worker URL from step 1 |
+| Username | your Xtream username |
+| Password | your Xtream password |
 
 Hit **Test connection** (you should see status/expiry/active connections), then
-**Save**. The catalog downloads once and is cached in your browser for 24 h.
+**Save**. Playback is routed through the built-in stream gateway — nothing else
+to configure. The catalog downloads once and is cached in your browser for 24 h.
 
 > **Never commit credentials.** `iptv.txt` in the repo root is gitignored; keep it
 > that way.
+
+<details>
+<summary>Forking? The app ships with a default gateway</summary>
+
+`app/js/store.js` has a `DEFAULT_GATEWAY` constant pointing at the deployer's
+worker. If you fork this and want your own worker to be the default for your
+users, change that constant. You can also override the gateway per device in
+**Settings → Advanced: stream gateway**.
+</details>
 
 ---
 
 ## Local development
 
 The catalog API is CORS-enabled, but streams are http-only — so when testing
-locally either use the Worker (recommended) or serve the app over plain http.
+locally either use a Worker (the default gateway works as-is) or serve the app
+over plain http.
 
 ```bash
 # 1. stream gateway (dev)
@@ -90,9 +101,9 @@ python3 -m http.server 8000
 # open http://localhost:8000/
 ```
 
-In **Settings → Stream gateway** pick:
+Then, in **Settings → Advanced: stream gateway**, pick either:
 
-- **Worker URL** → `http://127.0.0.1:8787` (works over https pages too), or
+- **Worker URL** → `http://127.0.0.1:8787` (also works from an https page), or
 - **Direct panel host** → only when the page itself is served over http
   (`http://localhost`) — the browser blocks mixed content otherwise.
 

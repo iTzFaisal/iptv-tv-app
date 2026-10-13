@@ -87,8 +87,7 @@ async function boot() {
 function needsSetup() {
   const c = state.creds;
   if (!c || !c.host || !c.username || !c.password) return true;
-  if (state.gateway.mode === "worker" && !state.gateway.url) return true;
-  return false;
+  return false; // the stream gateway has a built-in default
 }
 
 /* --------------------------------- routing -------------------------------- */
@@ -742,7 +741,7 @@ function renderExportInfo() {
 
 /* -------------------------------- settings --------------------------------- */
 
-const CREDS_FORM_HTML = (prefix) => `
+const CREDS_FORM_HTML = (prefix, { withGateway = false } = {}) => `
   <div class="field">
     <label for="${prefix}-host">Panel host</label>
     <input id="${prefix}-host" type="text" placeholder="http://panel.example.com:80" autocomplete="off" spellcheck="false">
@@ -757,12 +756,24 @@ const CREDS_FORM_HTML = (prefix) => `
       <input id="${prefix}-pass" type="password" autocomplete="current-password">
     </div>
   </div>
-  <fieldset class="gateway-box">
-    <legend>Stream gateway</legend>
-    <label class="radio"><input type="radio" name="${prefix}-gw" value="worker"> Cloudflare Worker URL <span class="muted">(recommended)</span></label>
-    <input id="${prefix}-gw-url" type="url" placeholder="https://your-worker.your-subdomain.workers.dev" spellcheck="false" autocomplete="off">
-    <label class="radio"><input type="radio" name="${prefix}-gw" value="direct"> Direct panel host <span class="muted">(only works when this app is served over plain http, e.g. local dev)</span></label>
-  </fieldset>
+  ${
+    withGateway
+      ? `
+  <details class="advanced">
+    <summary>Advanced: stream gateway</summary>
+    <p class="muted">
+      Playback goes through the built-in Cloudflare Worker by default. Change this only
+      if you deployed your own worker, or you're running a local gateway for development.
+    </p>
+    <fieldset class="gateway-box">
+      <label class="radio"><input type="radio" name="${prefix}-gw" value="worker"> Worker URL</label>
+      <input id="${prefix}-gw-url" type="url" spellcheck="false" autocomplete="off">
+      <label class="radio"><input type="radio" name="${prefix}-gw" value="direct"> Direct panel host <span class="muted">(only when this app is served over plain http, e.g. local dev)</span></label>
+      <button type="button" id="${prefix}-gw-reset" class="btn btn-small">Use default gateway</button>
+    </fieldset>
+  </details>`
+      : ""
+  }
   <div class="form-actions">
     <button id="${prefix}-test" class="btn" type="button">Test connection</button>
     <button id="${prefix}-save" class="btn btn-primary" type="button">Save</button>
@@ -777,40 +788,47 @@ function wireSetup() {
 function renderSettings() {
   const slot = $("#settings-form");
   if (!slot.dataset.built) {
-    slot.innerHTML = CREDS_FORM_HTML("settings");
+    slot.innerHTML = CREDS_FORM_HTML("settings", { withGateway: true });
     slot.dataset.built = "1";
-    wireCredsForm("settings", { afterSave: () => renderSettings() });
+    wireCredsForm("settings", { afterSave: () => renderSettings(), withGateway: true });
     wireSettingsExtras();
   }
   renderAccountCard();
   renderCacheInfo();
 }
 
-function wireCredsForm(prefix, { afterSave } = {}) {
+function wireCredsForm(prefix, { afterSave, withGateway = false } = {}) {
   const creds = store.getCreds() || {};
-  const gateway = store.getGateway();
   $(`#${prefix}-host`).value = creds.host || "";
   $(`#${prefix}-user`).value = creds.username || "";
   $(`#${prefix}-pass`).value = creds.password || "";
-  $(`#${prefix}-gw-url`).value = gateway.url || "";
-  $$(`input[name="${prefix}-gw"]`).forEach((radio) => {
-    radio.checked = radio.value === (gateway.mode || "worker");
-  });
+  if (withGateway) {
+    const gateway = store.getGateway();
+    $(`#${prefix}-gw-url`).value = gateway.url || "";
+    $$(`input[name="${prefix}-gw"]`).forEach((radio) => {
+      radio.checked = radio.value === (gateway.mode || "worker");
+    });
+    $(`#${prefix}-gw-reset`).addEventListener("click", () => {
+      $(`#${prefix}-gw-url`).value = store.DEFAULT_GATEWAY.url;
+      $$(`input[name="${prefix}-gw"]`).forEach((radio) => {
+        radio.checked = radio.value === store.DEFAULT_GATEWAY.mode;
+      });
+    });
+  }
 
   $(`#${prefix}-test`).addEventListener("click", () => testConnection(prefix));
-  $(`#${prefix}-save`).addEventListener("click", () => saveSettings(prefix, afterSave));
+  $(`#${prefix}-save`).addEventListener("click", () => saveSettings(prefix, afterSave, withGateway));
 }
 
-function readCredsForm(prefix) {
-  const mode = ($$(`input[name="${prefix}-gw"]`).find((r) => r.checked) || {}).value || "worker";
-  return {
-    creds: {
-      host: $(`#${prefix}-host`).value.trim(),
-      username: $(`#${prefix}-user`).value.trim(),
-      password: $(`#${prefix}-pass`).value,
-    },
-    gateway: { mode, url: $(`#${prefix}-gw-url`).value.trim() },
+function readCredsForm(prefix, withGateway = false) {
+  const creds = {
+    host: $(`#${prefix}-host`).value.trim(),
+    username: $(`#${prefix}-user`).value.trim(),
+    password: $(`#${prefix}-pass`).value,
   };
+  if (!withGateway) return { creds, gateway: null };
+  const mode = ($$(`input[name="${prefix}-gw"]`).find((r) => r.checked) || {}).value || "worker";
+  return { creds, gateway: { mode, url: $(`#${prefix}-gw-url`).value.trim() } };
 }
 
 function setFormStatus(prefix, html, cls = "") {
@@ -820,7 +838,7 @@ function setFormStatus(prefix, html, cls = "") {
 }
 
 async function testConnection(prefix) {
-  const { creds } = readCredsForm(prefix);
+  const { creds } = readCredsForm(prefix, false);
   if (!creds.host || !creds.username || !creds.password) {
     setFormStatus(prefix, "Fill in host, username and password first.", "error");
     return;
@@ -845,24 +863,26 @@ async function testConnection(prefix) {
   ui.setBusy(button, false);
 }
 
-function saveSettings(prefix, afterSave) {
-  const { creds, gateway } = readCredsForm(prefix);
+function saveSettings(prefix, afterSave, withGateway = false) {
+  const { creds, gateway } = readCredsForm(prefix, withGateway);
   if (!creds.host || !creds.username || !creds.password) {
     setFormStatus(prefix, "Host, username and password are required.", "error");
     return;
   }
-  if (gateway.mode === "worker" && !gateway.url) {
-    setFormStatus(prefix, "Enter your Cloudflare Worker URL, or switch to direct mode (local dev only).", "error");
-    return;
-  }
-  if (gateway.mode === "direct" && location.protocol === "https:") {
-    setFormStatus(prefix, "Direct mode can't work on an https page (mixed content). Use a Worker URL or <code>npx wrangler dev</code> + a local http page.", "error");
-    return;
+  if (gateway) {
+    if (gateway.mode === "worker" && !gateway.url) {
+      setFormStatus(prefix, "Enter your Cloudflare Worker URL, or switch to direct mode (local dev only).", "error");
+      return;
+    }
+    if (gateway.mode === "direct" && location.protocol === "https:") {
+      setFormStatus(prefix, "Direct mode can't work on an https page (mixed content). Use a Worker URL or <code>npx wrangler dev</code> + a local http page.", "error");
+      return;
+    }
   }
   store.setCreds(creds);
-  store.setGateway(gateway);
+  if (gateway) store.setGateway(gateway);
   state.creds = creds;
-  state.gateway = gateway;
+  state.gateway = gateway || store.getGateway();
   state.catalogs = { live: null, vod: null, series: null };
   state.itemMaps = { live: new Map(), vod: new Map(), series: new Map() };
   state.seriesInfoCache.clear();

@@ -37,10 +37,18 @@ export function lsDel(key) {
    gateway -> { mode: 'worker' | 'direct', url }
    settings-> { autoplay, lastTab }                                      */
 
+// Playback always needs a gateway (provider streams are http-only). The app
+// ships with a built-in default so users only ever enter host/user/password.
+// Overridable in Settings → Advanced (e.g. your own worker, or local dev).
+export const DEFAULT_GATEWAY = {
+  mode: "worker",
+  url: "https://iptv-gateway.faisalalkheraiji.workers.dev",
+};
+
 export const getCreds = () => lsGet("creds");
 export const setCreds = (creds) => lsSet("creds", creds);
 
-export const getGateway = () => lsGet("gateway", { mode: "worker", url: "" });
+export const getGateway = () => lsGet("gateway", DEFAULT_GATEWAY);
 export const setGateway = (gateway) => lsSet("gateway", gateway);
 
 export const getSettings = () => lsGet("settings", { autoplay: true, lastTab: "live" });

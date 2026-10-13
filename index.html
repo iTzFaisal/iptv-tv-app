@@ -30,21 +30,11 @@
     <div class="panel setup-panel">
       <h1>📺 IPTV Web Player</h1>
       <p class="muted">
-        Enter your Xtream Codes credentials once. They are stored only in this browser
-        (localStorage) and are only ever sent to your provider's panel and your own
-        Cloudflare Worker gateway.
+        Sign in with your Xtream Codes details: host, username and password.
+        They are stored only in this browser and only ever sent to your provider's
+        panel. Stream playback is already wired up — nothing else to configure.
       </p>
       <div id="setup-form"></div>
-      <details class="help">
-        <summary>Where do I get a Worker URL?</summary>
-        <p>
-          Playback needs a tiny stream gateway because provider streams are http-only.
-          Deploy the single file in <code>worker/cloudflare-worker.js</code> to Cloudflare
-          Workers (free) — see the repo README for the 2-minute guide. Running locally?
-          Use <code>npx wrangler dev worker/cloudflare-worker.js</code> and enter
-          <code>http://127.0.0.1:8787</code>.
-        </p>
-      </details>
     </div>
   </section>
 
