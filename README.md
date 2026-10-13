@@ -181,5 +181,6 @@ test/worker-check.sh          curl probes for the gateway
 | Live channel shows "offline" | The channel is dead provider-side (≈40% of random channels are). The badge clears when it plays again; retry any time. |
 | Series won't play in Safari/Firefox | MKV isn't supported there — that's what the ⛔ badge means. Use Chrome/Android. |
 | Movies don't play | Provider-side outage (see above); retry in **Settings → Catalog cache → Refresh**. |
+| Channel logos missing | The provider's logo server has a broken TLS certificate — the app falls back to a placeholder icon. Playback is unaffected. |
 | Everything fails after working | Re-run **Test connection** in Settings; if the account expired, renew with your provider. |
 | iPhone: settings lost after a while | iOS evicts storage for unused sites; use **Settings → Backup → Generate string** and keep it safe. |
