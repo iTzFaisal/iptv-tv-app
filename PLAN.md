@@ -4,7 +4,7 @@
 > Static frontend on **GitHub Pages** + one **Cloudflare Worker** as stream gateway.
 > Users enter their own Xtream credentials at first run. Free forever.
 >
-> **Status:** ready for implementation (verified against the live provider on 2026-10-14).
+> **Status:** implemented + deployed (2026-10-14) — GitHub Pages app + Cloudflare Worker gateway are live; see README for the URLs and first-run steps. All of §9 verified locally/in-browser except physical phone tests (engine-equivalent WebKit/Chromium/Firefox passes done).
 > **Credentials:** live in `iptv.txt` (repo root, **gitignored — never commit**). This plan uses `<USER>` / `<PASS>` / `<PANEL_HOST>` placeholders.
 
 ---
@@ -210,34 +210,35 @@ test/
 
 **P0 — Scaffold (small)**
 
-- [ ] Update `.gitignore` (add `iptv.txt`), create README skeleton, index.html shell, vendored hls.js, base dark CSS.
+- [x] Update `.gitignore` (add `iptv.txt`), create README skeleton, index.html shell, vendored hls.js, base dark CSS.
 
 **P1 — Worker**
 
-- [ ] Implement `worker/cloudflare-worker.js` per §5.
-- [ ] `npx wrangler dev` smoke test with `curl` against `/s/live/…m3u8` (expect manifest), `/hls/…` (expect `video/mp2t`), `/s/series/…mkv` range request (expect 200/206).
-- [ ] `test/worker-check.sh` passing locally.
+- [x] Implement `worker/cloudflare-worker.js` per §5.
+- [x] `npx wrangler dev` smoke test with `curl` against `/s/live/…m3u8` (expect manifest), `/hls/…` (expect `video/mp2t`), `/s/series/…mkv` range request (expect 200/206).
+- [x] `test/worker-check.sh` passing locally.
 
 **P2 — Data layer + Setup**
 
-- [ ] `api.js` (account/catalog/series_info), `store.js`, `catalog.js` (IndexedDB + TTL).
-- [ ] Setup screen + Test connection (status/expiry/active_cons) + gateway mode selection.
+- [x] `api.js` (account/catalog/series_info), `store.js`, `catalog.js` (IndexedDB + TTL).
+- [x] Setup screen + Test connection (status/expiry/active_cons) + gateway mode selection.
 
 **P3 — Browse UI**
 
-- [ ] Live/Movies/Series grids, categories, search, favorites. Counts must match §3.
+- [x] Live/Movies/Series grids, categories, search, favorites. Counts must match §3.
 
 **P4 — Player**
 
-- [ ] hls.js/native live playback; native VOD/series; badges; single-connection guard; resume; offline marking; next-episode; zapping.
+- [x] hls.js/native live playback; native VOD/series; badges; single-connection guard; resume; offline marking; next-episode; zapping.
 
 **P5 — Export**
 
-- [ ] M3U (all), M3U (live HLS), CSV, JSON downloads; Arabic-safe.
+- [x] M3U (all), M3U (live HLS), CSV, JSON downloads; Arabic-safe.
 
 **P6 — Polish + ship**
 
-- [ ] Mobile pass, settings import/export string, README deploy guide, acceptance tests (§9), deploy Worker + Pages, phone test.
+- [x] Mobile pass, settings import/export string, README deploy guide, acceptance tests (§9), deploy Worker + Pages
+- [ ] Phone test (needs a physical phone; engine-equivalent WebKit/Chromium passes done)
 
 ---
 
