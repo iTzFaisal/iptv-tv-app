@@ -45,7 +45,9 @@ Free tier, no card required.
    [`worker/cloudflare-worker.js`](worker/cloudflare-worker.js) → **Deploy**.
 4. Copy the URL shown, e.g. `https://iptv-gateway.<your-subdomain>.workers.dev`.
 
-Prefer the CLI? `npx wrangler deploy worker/cloudflare-worker.js`.
+Prefer the CLI? `npx wrangler login && npx wrangler deploy` — the repo ships a
+`wrangler.toml` (worker name `iptv-gateway`) so this just works. Rename it there
+if you like.
 
 > Free tier limits are fine for personal use: 100,000 requests/day, while a
 > viewer costs roughly 500 requests/hour.
