@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>IPTV playback check</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; }
+    input { background: #161b22; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 8px; width: 100%; }
+    label { display: block; margin: 10px 0 4px; color: #8b949e; font-size: 12px; }
+    button { background: #1f6feb; color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; font-weight: 600; cursor: pointer; margin-top: 12px; }
+    pre { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 12px; overflow: auto; }
+    video { width: 400px; background: #000; border-radius: 8px; margin-top: 12px; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+    #status { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>IPTV playback check</h1>
+  <p>
+    Manual / Playwright harness. Serve this folder over http (e.g.
+    <code>python3 -m http.server 8080</code> from the repo root) and open
+    <code>http://localhost:8080/test/playback-check.html?user=…&amp;pass=…&amp;channel=526337&amp;episode=900353</code>.
+    Leave <em>worker</em> empty to test the raw http panel host (local dev); fill it in
+    to test the Cloudflare Worker gateway. Results land in <code>window.__RESULTS</code>.
+  </p>
+
+  <div class="row">
+    <div><label>Worker base URL (blank = direct http)</label><input id="worker" placeholder="http://127.0.0.1:8787"></div>
+    <div><label>Panel / stream host (direct mode)</label><input id="host" placeholder="http://be2.it.com:80"></div>
+  </div>
+  <div class="row">
+    <div><label>Username</label><input id="user"></div>
+    <div><label>Password</label><input id="pass"></div>
+  </div>
+  <div class="row">
+    <div><label>Live channel id</label><input id="channel" value="526337"></div>
+    <div><label>Series episode id</label><input id="episode" value="900353"></div>
+  </div>
+  <button id="run">Run checks</button>
+  <p id="status">idle</p>
+  <pre id="log"></pre>
+  <video id="video" controls muted playsinline></video>
+
+  <script src="../app/vendor/hls.min.js"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var fields = ["worker", "host", "user", "pass", "channel", "episode"];
+      var config = {};
+      fields.forEach(function (name) {
+        var input = document.getElementById(name);
+        var fromUrl = params.get(name);
+        var stored = null;
+        try { stored = localStorage.getItem("pc." + name); } catch (e) {}
+        input.value = fromUrl != null ? fromUrl : stored || input.value || "";
+        input.addEventListener("change", function () {
+          try { localStorage.setItem("pc." + name, input.value); } catch (e) {}
+        });
+        config[name] = input.value;
+      });
+
+      var logEl = document.getElementById("log");
+      var statusEl = document.getElementById("status");
+      var video = document.getElementById("video");
+
+      function log(line) {
+        logEl.textContent += line + "\n";
+      }
+      function trim(url) { return String(url || "").replace(/\/+$/, ""); }
+
+      function liveUrl() {
+        var base = config.worker ? trim(config.worker) + "/s" : trim(config.host || "http://be2.it.com:80");
+        return base + "/live/" + config.user + "/" + config.pass + "/" + config.channel + ".m3u8";
+      }
+      function episodeUrl() {
+        var base = config.worker ? trim(config.worker) + "/s" : trim(config.host || "http://be2.it.com:80");
+        return base + "/series/" + config.user + "/" + config.pass + "/" + config.episode + ".mkv";
+      }
+
+      function testLive() {
+        log("[live] loading stream…");
+        var result = { started: false, width: 0, height: 0, errors: [], outcome: "" };
+        return new Promise(function (resolve) {
+          var finished = false;
+          var timer = setTimeout(function () { finish("timeout"); }, 35000);
+          function finish(outcome) {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            result.outcome = outcome;
+            if (hls) { try { hls.destroy(); } catch (e) {} }
+            video.removeAttribute("src");
+            try { video.load(); } catch (e) {}
+            log("[live] " + outcome);
+            resolve(result);
+          }
+          var hls = null;
+          video.addEventListener("playing", function onPlaying() {
+            video.removeEventListener("playing", onPlaying);
+            result.started = true;
+            result.width = video.videoWidth;
+            result.height = video.videoHeight;
+            finish("playing");
+          });
+          video.addEventListener("error", function () {
+            result.errors.push({ video: video.error ? video.error.code : -1 });
+            finish("error");
+          });
+          if (window.Hls && Hls.isSupported()) {
+            hls = new Hls({ enableWorker: true });
+            hls.on(Hls.Events.ERROR, function (_e, data) {
+              result.errors.push({ type: data.type, details: data.details, fatal: !!data.fatal });
+              log("[live] hls error: " + data.type + " / " + data.details + (data.fatal ? " (fatal)" : ""));
+              if (data.fatal && data.type !== Hls.ErrorTypes.NETWORK_ERROR) finish("fatal");
+            });
+            hls.loadSource(liveUrl());
+            hls.attachMedia(video);
+          } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+            video.src = liveUrl();
+          } else {
+            finish("unsupported");
+            return;
+          }
+          video.play().catch(function () {});
+        });
+      }
+
+      function testEpisode() {
+        log("[episode] loading mkv…");
+        return new Promise(function (resolve) {
+          var result = { started: false, width: 0, height: 0, duration: null, errors: [], outcome: "" };
+          var finished = false;
+          var timer = setTimeout(function () { finish("timeout"); }, 35000);
+          function finish(outcome) {
+            if (finished) return;
+            finished = true;
+            clearTimeout(timer);
+            result.outcome = outcome;
+            video.removeAttribute("src");
+            try { video.load(); } catch (e) {}
+            log("[episode] " + outcome);
+            resolve(result);
+          }
+          video.addEventListener("loadedmetadata", function () {
+            result.duration = video.duration;
+          });
+          video.addEventListener("playing", function onPlaying() {
+            video.removeEventListener("playing", onPlaying);
+            result.started = true;
+            result.width = video.videoWidth;
+            result.height = video.videoHeight;
+            finish("playing");
+          });
+          video.addEventListener("error", function () {
+            result.errors.push({ video: video.error ? video.error.code : -1 });
+            finish("error");
+          });
+          video.src = episodeUrl();
+          video.play().catch(function () {});
+        });
+      }
+
+      async function run() {
+        fields.forEach(function (name) { config[name] = document.getElementById(name).value; });
+        logEl.textContent = "";
+        statusEl.textContent = "running…";
+        window.__RESULTS = { startedAt: new Date().toISOString(), ua: navigator.userAgent, worker: !!config.worker };
+        window.__RESULTS.live = await testLive();
+        window.__RESULTS.episode = await testEpisode();
+        window.__RESULTS.finishedAt = new Date().toISOString();
+        var ok = window.__RESULTS.live.started && window.__RESULTS.episode.started;
+        statusEl.textContent = ok ? "ALL PASS ✅" : "CHECK RESULTS ⚠️";
+        statusEl.style.color = ok ? "#3fb950" : "#d29922";
+        log(JSON.stringify(window.__RESULTS, null, 2));
+      }
+
+      document.getElementById("run").addEventListener("click", run);
+
+      var autoFields = ["user", "pass", "channel", "episode"];
+      if (autoFields.every(function (name) { return params.get(name); })) {
+        setTimeout(run, 300);
+      }
+    })();
+  </script>
+</body>
+</html>

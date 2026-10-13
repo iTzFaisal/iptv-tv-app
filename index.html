@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="description" content="Browser-based IPTV player for Xtream Codes accounts — live TV, movies and series, straight in your browser.">
+  <title>IPTV Web Player</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📺</text></svg>">
+  <link rel="stylesheet" href="app/app.css">
+</head>
+<body>
+
+<header id="app-chrome" class="topbar hidden">
+  <button id="brand-home" class="brand" title="Home">📺 <span>IPTV</span></button>
+  <nav id="tabs">
+    <button data-tab="live">Live</button>
+    <button data-tab="movies">Movies</button>
+    <button data-tab="series">Series</button>
+    <button data-tab="favorites">Favorites</button>
+    <button data-tab="export">Export</button>
+    <button data-tab="settings">Settings</button>
+  </nav>
+</header>
+
+<main id="main">
+
+  <!-- ------------------------------- setup ------------------------------- -->
+  <section id="view-setup" class="view">
+    <div class="panel setup-panel">
+      <h1>📺 IPTV Web Player</h1>
+      <p class="muted">
+        Enter your Xtream Codes credentials once. They are stored only in this browser
+        (localStorage) and are only ever sent to your provider's panel and your own
+        Cloudflare Worker gateway.
+      </p>
+      <div id="setup-form"></div>
+      <details class="help">
+        <summary>Where do I get a Worker URL?</summary>
+        <p>
+          Playback needs a tiny stream gateway because provider streams are http-only.
+          Deploy the single file in <code>worker/cloudflare-worker.js</code> to Cloudflare
+          Workers (free) — see the repo README for the 2-minute guide. Running locally?
+          Use <code>npx wrangler dev worker/cloudflare-worker.js</code> and enter
+          <code>http://127.0.0.1:8787</code>.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ------------------------------- live -------------------------------- -->
+  <section id="view-live" class="view hidden">
+    <div class="chips" id="live-cats"></div>
+    <div class="toolbar">
+      <input id="live-search" class="search" type="search" placeholder="Search channels…" autocomplete="off">
+      <button id="live-fav" class="chip chip-action" title="Only favorites">★ Favorites</button>
+      <button id="live-refresh" class="chip chip-action" title="Refresh catalog from panel">↻</button>
+      <span id="live-count" class="count"></span>
+    </div>
+    <div class="status-line">
+      <span id="live-status" class="status-text"></span>
+      <button id="live-retry" class="btn btn-small hidden">Retry</button>
+    </div>
+    <div id="live-grid" class="grid grid-live"></div>
+  </section>
+
+  <!-- ------------------------------ movies ------------------------------- -->
+  <section id="view-movies" class="view hidden">
+    <div id="movies-notice" class="notice hidden">
+      <div>
+        <strong>Heads-up:</strong> the provider's movie servers currently return errors
+        (all movie links 404 upstream as of 2026-10-14). You can browse the catalog,
+        but playback may fail until the provider fixes it — the player will show a
+        friendly notice if so.
+      </div>
+      <button id="movies-notice-close" class="player-btn" title="Dismiss">✕</button>
+    </div>
+    <div class="chips" id="movies-cats"></div>
+    <div class="toolbar">
+      <input id="movies-search" class="search" type="search" placeholder="Search movies…" autocomplete="off">
+      <button id="movies-fav" class="chip chip-action" title="Only favorites">★ Favorites</button>
+      <button id="movies-refresh" class="chip chip-action" title="Refresh catalog from panel">↻</button>
+      <span id="movies-count" class="count"></span>
+    </div>
+    <div class="status-line">
+      <span id="movies-status" class="status-text"></span>
+      <button id="movies-retry" class="btn btn-small hidden">Retry</button>
+    </div>
+    <div id="movies-grid" class="grid grid-poster"></div>
+  </section>
+
+  <!-- ------------------------------ series ------------------------------- -->
+  <section id="view-series" class="view hidden">
+    <div class="chips" id="series-cats"></div>
+    <div class="toolbar">
+      <input id="series-search" class="search" type="search" placeholder="Search series…" autocomplete="off">
+      <button id="series-fav" class="chip chip-action" title="Only favorites">★ Favorites</button>
+      <button id="series-refresh" class="chip chip-action" title="Refresh catalog from panel">↻</button>
+      <span id="series-count" class="count"></span>
+    </div>
+    <div class="status-line">
+      <span id="series-status" class="status-text"></span>
+      <button id="series-retry" class="btn btn-small hidden">Retry</button>
+    </div>
+    <div id="series-grid" class="grid grid-poster"></div>
+  </section>
+
+  <!-- --------------------------- series detail ---------------------------- -->
+  <section id="view-series-detail" class="view hidden">
+    <div class="detail-head">
+      <button id="series-back" class="btn btn-small">← Back</button>
+      <div class="detail-main">
+        <div id="series-cover" class="detail-cover"></div>
+        <div class="detail-info">
+          <h2 id="series-title"></h2>
+          <div id="series-meta" class="muted"></div>
+          <p id="series-plot" class="plot"></p>
+        </div>
+        <button id="series-fav" class="fav-btn fav-btn-large" title="Toggle favorite">★</button>
+      </div>
+    </div>
+    <div class="chips" id="series-seasons"></div>
+    <div id="series-episodes-status" class="status-text"></div>
+    <div id="series-episodes" class="episodes"></div>
+  </section>
+
+  <!-- ----------------------------- favorites ------------------------------ -->
+  <section id="view-favorites" class="view hidden">
+    <div class="chips" id="fav-filter"></div>
+    <div class="toolbar">
+      <span id="fav-count" class="count"></span>
+    </div>
+    <div id="fav-list" class="grid grid-live"></div>
+  </section>
+
+  <!-- ------------------------------- export ------------------------------- -->
+  <section id="view-export" class="view hidden">
+    <div class="panel">
+      <h2>Export</h2>
+      <p class="muted">
+        Links are generated in your browser from the cached catalog — no giant playlist
+        download from the provider needed. Files are UTF-8 and keep Arabic names.
+        The panel-format URLs contain your username and password — keep the files private.
+      </p>
+
+      <div class="export-grid">
+        <div class="export-card">
+          <h3>playlist-all.m3u</h3>
+          <p>Everything: live channels (Xtream format) + movies + cached series episodes.</p>
+          <button id="export-all" class="btn btn-primary">Download</button>
+        </div>
+        <div class="export-card">
+          <h3>live-hls.m3u</h3>
+          <p>Live channels as modern <code>.m3u8</code> links for VLC and friends.</p>
+          <button id="export-live-hls" class="btn btn-primary">Download</button>
+        </div>
+        <div class="export-card">
+          <h3>playlist-series.m3u</h3>
+          <p>All series episodes. First run fetches episode ids from the panel (a few minutes, cached afterwards).</p>
+          <button id="export-series" class="btn btn-primary">Fetch &amp; download</button>
+        </div>
+        <div class="export-card">
+          <h3>catalog.csv</h3>
+          <p>Spreadsheet of id, type, name, category, added, rating, poster, container.</p>
+          <button id="export-csv" class="btn btn-primary">Download</button>
+        </div>
+        <div class="export-card">
+          <h3>catalog.json</h3>
+          <p>Same data as JSON for scripts.</p>
+          <button id="export-json" class="btn btn-primary">Download</button>
+        </div>
+      </div>
+
+      <div class="status-line">
+        <span id="export-status" class="status-text"></span>
+        <button id="export-cancel" class="btn btn-small hidden">Cancel</button>
+      </div>
+
+      <h3>Catalog on this device</h3>
+      <div id="export-info" class="muted"></div>
+      <button id="export-refresh-info" class="btn btn-small">Refresh info</button>
+    </div>
+  </section>
+
+  <!-- ------------------------------ settings ------------------------------- -->
+  <section id="view-settings" class="view hidden">
+    <div class="panel">
+      <h2>Connection</h2>
+      <div id="settings-form"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Account</h2>
+      <div id="account-card" class="account-card"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Catalog cache</h2>
+      <p class="muted">Catalogs are cached for 24&nbsp;h in IndexedDB so browsing is instant.</p>
+      <div id="cache-info"></div>
+      <div class="form-actions">
+        <button id="cache-refresh-all" class="btn">Refresh everything</button>
+        <button id="cache-clear" class="btn btn-danger">Clear cache</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Backup</h2>
+      <p class="muted">
+        Export a settings string and keep it somewhere safe — useful if iOS clears
+        website storage. It contains your credentials, favorites and resume positions.
+      </p>
+      <textarea id="backup-text" class="backup-text" rows="4" placeholder="Paste a settings string here to import…" spellcheck="false"></textarea>
+      <div class="form-actions">
+        <button id="backup-export" class="btn">Generate string</button>
+        <button id="backup-copy" class="btn">Copy</button>
+        <button id="backup-import" class="btn btn-primary">Import</button>
+      </div>
+    </div>
+
+    <div class="panel danger-panel">
+      <h2>Danger zone</h2>
+      <div class="form-actions">
+        <button id="clear-favorites" class="btn">Clear favorites</button>
+        <button id="clear-history" class="btn">Clear watch history</button>
+        <button id="reset-app" class="btn btn-danger">Reset app</button>
+      </div>
+    </div>
+
+    <p class="muted footer-note">
+      Live HLS: <span id="compat-hls"></span> · MKV: <span id="compat-mkv"></span> ·
+      Engine: <span id="compat-engine"></span>
+    </p>
+  </section>
+
+</main>
+
+<!-- -------------------------------- player --------------------------------- -->
+<div id="player" class="player hidden">
+  <div class="player-top">
+    <button id="player-close" class="player-btn" title="Close">✕</button>
+    <div class="player-heading">
+      <div id="player-title"></div>
+      <div id="player-subtitle"></div>
+    </div>
+    <span id="player-live-dot" class="live-dot hidden">LIVE</span>
+  </div>
+  <video id="player-video" playsinline controls></video>
+  <div id="player-overlay" class="player-overlay hidden">
+    <div class="overlay-card">
+      <h3 id="player-overlay-title"></h3>
+      <p id="player-overlay-text"></p>
+      <div id="player-overlay-actions" class="overlay-actions"></div>
+    </div>
+  </div>
+  <div id="player-resume" class="player-resume hidden">
+    <span id="player-resume-text"></span>
+    <button id="player-resume-go" class="btn btn-small btn-primary">Resume</button>
+    <button id="player-resume-restart" class="btn btn-small">Start over</button>
+  </div>
+  <div class="player-bottom">
+    <button id="player-prev" class="player-btn" title="Previous channel / episode">⏮</button>
+    <button id="player-next" class="player-btn" title="Next channel / episode">⏭</button>
+    <div class="spacer"></div>
+    <button id="player-pip" class="player-btn" title="Picture in picture">PiP</button>
+    <button id="player-fs" class="player-btn" title="Fullscreen">⛶</button>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script src="app/vendor/hls.min.js"></script>
+<script type="module" src="app/app.js"></script>
+</body>
+</html>
